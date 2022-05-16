@@ -1,0 +1,121 @@
+
+
+from bs4 import BeautifulSoup
+from requests import get
+import pandas as pd
+from time import sleep
+
+pop_df = pd.read_csv('/content/population_total.csv')
+pop_df.head()
+
+
+
+url = "https://www.countryflags.com/"
+response = get(url)
+
+html_soup = BeautifulSoup(response.text, 'html.parser')
+
+
+
+html_soup
+
+
+containers = html_soup.find_all('div', class_='thumb')
+for container in containers: 
+  try:
+    country_name = container.find('span', class_='title').text[8:]
+    country_flag_url = container.find('img')['src']
+    print(country_name, end=" ")
+    print(country_flag_url)
+    sleep(0.05)
+  except:
+    pass
+    
+ # pour stocker le nom des pays dans une liste appelée 'countries_name' et les urls des drapeaux dans une liste appelée 'countries_flag' 
+ 
+countries_name = []
+countries_flag = []
+
+containers = html_soup.find_all('div', class_='thumb')
+for container in containers: 
+  try:
+    country_name = container.find('span', class_='title').text[8:]
+    country_flag_url = container.find('img')['src']
+    countries_name.append(country_name)
+    countries_flag.append(country_flag_url)
+    sleep(0.05)
+  except:
+    pass
+
+print(countries_name)
+print(countries_flag)
+
+# Création d'un dataframe 'df_countries_flag' à partir de nos listes 'countries_name' et 'countries_flag'.
+df_countries_flag = pd.DataFrame(list(zip(countries_name, countries_flag)), columns = ['country_name', 'country_flag'])
+df_countries_flag
+
+# Le code suivant vérifie si le nom d'un pays est présent à la fois dans le dataset 'pop_df' et 'df_countries_flag'. Si c'est le cas, alors l'url
+# du drapeau du pays est transféré dans le dataset 'pop_df', dans une nouvelle colonne appelée 'url_flag'. Dans le cas contraire, la valeur -1 sera
+# ajoutée. Le code applique cela à tous les pays du dataset 'pop_df'.
+
+pop_df['url_flag'] = (pop_df.country.apply(lambda x: df_countries_flag.query('@x in country_name').index.values).apply(lambda x: x[0] if len(x) else -1)).apply(lambda x: df_countries_flag.country_flag[x] if x != -1 else x)
+                         
+!pip install pycountry-convert
+import pycountry_convert as pcc
+
+# Extraction de la colonne 'country' depuis notre dataframe et la transformer en liste
+list_country = list(pop_df['country'])
+list_country
+
+# Utilisation de la librairie pycountry_convert afin d'associer chaque pays à son code continent. 
+# Indice: nous utiliserons ici le format 'alpha2' pour obtenir de meilleurs résultats.
+# Afin d'éviter tout arrêt d'exécution de notre code en cas de "non match"====> 'try except'.
+import numpy as np
+
+list_continent_code = []
+for c in list_country :
+  try :
+    code_continent = pcc.country_alpha2_to_continent_code(pcc.country_name_to_country_alpha2(c))
+    list_continent_code.append(code_continent)
+  except :
+    list_continent_code.append('NaN')
+
+list_continent_code
+
+len(list_continent_code)
+
+# Création d' un nouveau dataframe qui contiendra les noms des pays et codes continents
+
+df_countries_continents = pd.DataFrame(list(zip(list_country, list_continent_code)), columns = ['country_name', 'country_continent_code'])
+df_countries_continents
+
+df_countries_continents['country_continent_code'].unique()
+masq1 = df_countries_continents[df_countries_continents['country_continent_code'] == 'NaN']
+masq1
+continents_to_add = ['AF', 'AF', 'AF', 'EU', 'AS', 'OC', 'NA', 'AS']
+list_index = masq1.index
+list_continent_code
+for i in range(len(list_index)) :
+  list_continent_code[list_index[i]] = continents_to_add[i]
+
+list_continent_code
+pop_df.insert(1, 'region', list_continent_code)
+
+pop_df
+#labels
+
+pop_df.loc[pop_df['region'] == 'NA', 'region'] = 'AM'
+pop_df.loc[pop_df['region'] == 'SA', 'region'] = 'AM'
+pop_df.loc[pop_df['region'] == 'OC', 'region'] = 'AS'
+
+pop_df.loc[pop_df['region'] == 'AS', 'region'] = 'Asia'
+pop_df.loc[pop_df['region'] == 'EU', 'region'] = 'Europe'
+pop_df.loc[pop_df['region'] == 'AF', 'region'] = 'Africa'
+pop_df.loc[pop_df['region'] == 'AM', 'region'] = 'Americas'
+pop_df
+pop_df.to_csv('pop_df.csv', index=False)
+
+from IPython.core.display import HTML
+HTML('<div class="flourish-embed flourish-bar-chart-race" data-src="visualisation/9312102"><script src="https://public.flourish.studio/resources/embed.js"></script></div>')
+
+pop_df[pop_df['url_flag'] == -1][['country', 'url_flag']]
